@@ -65,7 +65,7 @@ def create_draft(token, title, author, digest, content, thumb_media_id):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='创建公众号草稿')
     parser.add_argument('--title', required=True, help='文章标题')
-    parser.add_argument('--author', default='', help='作者')
+    parser.add_argument('--author', default=None, help='作者（或设置 WX_AUTHOR 环境变量）')
     parser.add_argument('--digest', default='', help='文章摘要')
     parser.add_argument('--content-file', required=True, help='HTML内容文件路径')
     parser.add_argument('--cover', required=True, help='封面图路径')
@@ -75,6 +75,7 @@ if __name__ == '__main__':
 
     appid = args.appid or os.environ.get('WX_APPID')
     appsecret = args.appsecret or os.environ.get('WX_APPSECRET')
+    author = args.author or os.environ.get('WX_AUTHOR', '')
     if not appid or not appsecret:
         print("Error: AppID and AppSecret required (--appid/--appsecret or WX_APPID/WX_APPSECRET)", file=sys.stderr)
         sys.exit(1)
@@ -89,5 +90,5 @@ if __name__ == '__main__':
     thumb_id = upload_image(token, args.cover)
 
     print("Creating draft...")
-    create_draft(token, args.title, args.author, args.digest, content, thumb_id)
+    create_draft(token, args.title, author, args.digest, content, thumb_id)
     print("Done!")

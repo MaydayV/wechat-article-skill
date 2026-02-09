@@ -7,12 +7,15 @@ description: Create, format, and publish WeChat Official Account (微信公众�
 
 ## 配置
 
-公众号的 AppID、AppSecret、作者等信息存放在 `TOOLS.md` 中，不要硬编码在 skill 内。
+通过环境变量配置公众号凭证，**不要硬编码在 skill 文件中**：
 
-使用前确认 `TOOLS.md` 中包含以下字段：
-- AppID
-- AppSecret
-- 默认作者
+```bash
+export WX_APPID="你的AppID"
+export WX_APPSECRET="你的AppSecret"
+export WX_AUTHOR="默认作者名"
+```
+
+也可在调用脚本时通过 `--appid`、`--appsecret`、`--author` 参数传入。
 
 ## 工作流程
 
@@ -57,7 +60,7 @@ python3 scripts/create_cover.py \
 
 ### 4. 推送到草稿箱
 
-运行发布脚本，通过环境变量或参数传入 AppID 和 AppSecret：
+运行发布脚本：
 
 ```bash
 python3 scripts/publish_draft.py \
@@ -65,12 +68,10 @@ python3 scripts/publish_draft.py \
   --author "作者名" \
   --digest "文章摘要（120字以内）" \
   --content-file article.html \
-  --cover cover.jpg \
-  --appid <从TOOLS.md读取> \
-  --appsecret <从TOOLS.md读取>
+  --cover cover.jpg
 ```
 
-也可通过环境变量 `WX_APPID` 和 `WX_APPSECRET` 传入。
+脚本会从环境变量 `WX_APPID`、`WX_APPSECRET` 读取凭证，也可通过 `--appid`、`--appsecret` 参数覆盖。
 
 脚本会自动：获取 access_token → 上传封面图为永久素材 → 创建草稿。
 
@@ -79,4 +80,4 @@ python3 scripts/publish_draft.py \
 - 仅推送到草稿箱，**不会直接发布**
 - 推送后提醒用户去公众号后台预览确认
 - 封面图尺寸 900×383（2.35:1 比例）
-- **不要在 skill 文件中存放 AppID、AppSecret 等敏感信息**
+- **不要在 skill 文件中存放 AppID、AppSecret 等敏感信息**，通过环境变量或参数传入
