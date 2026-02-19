@@ -1,19 +1,13 @@
 ---
 name: wechat-article
-description: Create, format, and publish WeChat Official Account (微信公众号) articles with consistent styling and cover images. Use when user wants to write, format, or publish a 公众号 article, generate a cover image for 公众号, or push content to WeChat draft box.
+description: Create, format, and publish WeChat Official Account (微信公众号) articles to draft box with stable quality gates (config bootstrap, metadata validation, cover style×palette presets, and publish preflight). Use when user asks to write/format/publish a WeChat article, generate cover image, or push content to 公众号草稿箱.
 ---
 
-# 微信公众号文章创作
+# 微信公众号文章创作（稳定版）
 
-## 配置
+## 配置文件
 
-所有配置存放在工作区的 `wechat-article.config.json` 文件中。
-
-### 首次使用
-
-如果 `wechat-article.config.json` 不存在，进入**初始化配置**流程：
-
-通过对话逐步询问用户以下信息，收集完成后写入配置文件：
+统一使用工作区 `wechat-article.config.json`：
 
 ```json
 {
@@ -22,108 +16,244 @@ description: Create, format, and publish WeChat Official Account (微信公众�
   "author": "默认作者名",
   "writing": {
     "perspective": "第一人称",
-    "tone": "口语化，像跟朋友聊天分享观点",
+    "tone": "口语化",
     "length": "1500-2500字",
     "direction": "科技/AI/产品思考",
     "keywords_style": "短句为主，一行不超过30字"
+  },
+  "publish": {
+    "need_open_comment": 1,
+    "only_fans_can_comment": 0
+  },
+  "cover": {
+    "default_style": "minimal-grid",
+    "palette": "auto",
+    "rotate": "sequential",
+    "seed": "title",
+    "allowed_styles": ["minimal-grid", "card-editorial", "diagonal-motion", "soft-gradient"],
+    "allowed_palettes": ["blue-tech", "purple-insight", "green-growth", "orange-energy", "rose-story", "slate-pro"]
+  },
+  "preview": {
+    "send_cover_preview": 1,
+    "require_confirm_before_publish": 1,
+    "confirm_keyword": "确认发布"
   }
 }
 ```
 
-引导话术示例：
+### 首次使用
 
-> 首次使用公众号文章功能，我需要了解几个信息来帮你配置：
-> 1. 公众号的 AppID 和 AppSecret 是什么？（需要在公众号后台将服务器IP加白名单）
-> 2. 文章的默认作者名？
-> 3. 你的写作风格偏好：
->    - 用什么视角？（第一人称 / 第三人称 / 旁观者）
->    - 什么语气？（口语化聊天 / 正式专业 / 幽默风趣 / 其他）
->    - 文章通常多长？（1000字左右 / 1500-2500字 / 3000字以上）
->    - 主要写什么方向？（科技/生活/商业/其他）
+若配置不存在，先问完并写入：
+1. `appid` / `appsecret`
+2. 默认作者
+3. 写作风格（视角、语气、长度、方向）
+4. 评论开关（默认：开放评论=1，仅粉丝可评=0）
+5. 优先使用内置预览图（`assets/cover-style-palette-preview-grid.jpg`）展示风格×配色，让用户选择默认风格
+6. 写入封面策略（默认 `palette=auto`, `rotate=sequential`, `seed=title`）
 
-用户可以一次性回答，也可以逐条回答。收集完后写入 `wechat-article.config.json`。
+若内置预览图不存在或需要更新，再执行：
+
+```bash
+python3 scripts/create_cover_preview_grid.py
+```
+
+将预览图发给用户后，必须用**中文+编号**询问（不要英文术语裸露给用户）：
+
+- A. 默认风格（4选1）
+  - A1 极简网格（minimal-grid）
+  - A2 编辑卡片（card-editorial）
+  - A3 斜切动势（diagonal-motion）
+  - A4 柔和渐变（soft-gradient）
+
+- B. 配色策略（2选1）
+  - B1 自动轮换配色（palette=auto，推荐）
+  - B2 固定单一配色（从 C 区再选 1 套）
+
+- C. 配色方案（6选1，仅在 B2 时必选）
+  - C1 科技蓝（blue-tech）
+  - C2 洞察紫（purple-insight）
+  - C3 增长绿（green-growth）
+  - C4 活力橙（orange-energy）
+  - C5 故事玫红（rose-story）
+  - C6 专业灰（slate-pro）
+
+- D. 轮换方式（2选1，仅在 B1 时必选）
+  - D1 顺序轮换（sequential，推荐）
+  - D2 随机轮换（random）
+
+用户回复格式：`A2 B1 D1` 或 `A1 B2 C3`。
+
+然后把选择结果持久化到 `wechat-article.config.json` 的 `cover` 字段。
 
 ### 后续使用
 
-配置文件存在时，直接读取，用户只需提供**文章主题**即可，例如：
+配置存在时：用户给主题即可，按流程执行「创作 → 排版 → 封面 → 预览确认 → 草稿发布」。
 
-> "帮我写一篇公众号文章，聊聊AI让创新变简单了"
+## 工作流（必须按顺序）
 
-agent 根据配置中的写作风格自动完成：写内容 → 排版 → 生成封面图 → 推送草稿。
+复制并勾选：
 
-### 修改配置
+```text
+WeChat Article Progress:
+- [ ] Step 0: 读取/初始化配置
+- [ ] Step 1: 生成文章内容
+- [ ] Step 2: 产出 HTML（内联样式）
+- [ ] Step 3: 校验元数据（标题/摘要/作者）
+- [ ] Step 4: 生成或解析封面图（style × palette）
+- [ ] Step 5: 发送预览（文本 + 封面图）并等待确认
+- [ ] Step 6: 发布前预检（凭证/依赖/文件）
+- [ ] Step 7: 推送草稿
+- [ ] Step 8: 返回结果与下一步
+```
 
-用户随时可以说"修改公众号配置"或"更新写作风格"，agent 读取现有配置，询问要改哪项，更新后写回文件。
+### Step 0: 读取/初始化配置
 
-## 工作流程
+- 读取 `wechat-article.config.json`
+- 不存在则进入首次配置并写入
+- 配置存在但缺字段：只补缺失字段，不覆盖用户已有偏好
+- 若 `cover.default_style` 缺失：
+  1) 优先使用 `assets/cover-style-palette-preview-grid.jpg` 作为预览图
+  2) 若该图不存在，再运行 `python3 scripts/create_cover_preview_grid.py` 生成
+  3) 给用户看图并让其选择默认风格
+  4) 把选择写回 `cover.default_style`
 
-### 1. 读取配置
+### Step 1: 生成文章内容
 
-读取 `wechat-article.config.json`，获取凭证和写作风格。不存在则进入初始化流程。
+按配置中的 `writing.*` 产出正文。
 
-### 2. 创作文章
+约束：
+- 标题建议 ≤ 20 个中文字符（传播友好）
+- 正文建议 ≤ 1000~2500 字（按用户配置）
+- 结构优先：开场、3-5 个小节、结尾行动建议
 
-根据用户主题 + 配置中的写作风格生成文章：
+### Step 2: 产出 HTML（内联样式）
 
-- **视角**：按 `writing.perspective` 设定
-- **语气**：按 `writing.tone` 设定
-- **长度**：按 `writing.length` 控制
-- **方向**：按 `writing.direction` 参考
+严格按 `references/article-style.md`：
+- 外层 `<section>`
+- 正文 `<p>`（16px, line-height 2）
+- 重点 `<strong style="color:#1a73e8;">`
+- 章节间 `<hr>`
+- 不输出 markdown，不依赖外部 CSS
 
-### 3. 排版为 HTML
+### Step 3: 校验元数据
 
-按 [references/article-style.md](references/article-style.md) 的排版规范格式化。
+发布前必须有：
+- `title`（不能为空）
+- `digest`（建议 ≤ 120 字）
+- `author`（优先配置 author）
 
-核心要素：
-- `<p>` 标签：`font-size:16px; line-height:2; color:#333; margin:15px 0; text-align:justify`
-- 短句用 `<br />` 换行
-- 重点句用 `<strong style="color: #1a73e8;">` 蓝色加粗（每篇 3-6 处）
-- 段落间用 `<hr style="border:none; border-top:1px solid #eee; margin:30px 0;" />` 分隔
-- 章节标题用 `<h2>` + 蓝色下划线（见 references/article-style.md）
-- 外层 `<section>` 带 font-family 和 padding
+回填顺序：
+1. 用户显式给定
+2. 配置默认值
+3. 自动生成（标题取主标题，摘要取首段压缩）
 
-### 4. 生成封面图
+### Step 4: 生成或解析封面图（style × palette）
 
-运行封面图脚本（依赖 Pillow，需先 `pip3 install Pillow -q`）：
+优先级：
+1. 用户提供 cover 路径
+2. 项目目录 `imgs/cover.png`（若存在）
+3. 运行 `scripts/create_cover.py` 生成 `cover.jpg`
+
+风格：
+- `minimal-grid`
+- `card-editorial`
+- `diagonal-motion`
+- `soft-gradient`
+
+配色：
+- `blue-tech`
+- `purple-insight`
+- `green-growth`
+- `orange-energy`
+- `rose-story`
+- `slate-pro`
+- `auto`（按 `rotate` 策略选色）
+
+生成命令（默认）
 
 ```bash
 python3 scripts/create_cover.py \
   --title "主标题" \
   --subtitle "副标题" \
+  --style "minimal-grid" \
+  --palette "auto" \
+  --rotate "sequential" \
+  --seed "主标题" \
   --output cover.jpg
 ```
 
-可选参数：
-- `--bg-color "R,G,B"` — 背景色（默认 `235,240,248` 浅灰蓝）
-- `--text-color "R,G,B"` — 标题色（默认 `40,50,75` 深蓝灰）
-- `--sub-color "R,G,B"` — 副标题色（默认 `90,100,130`）
+命令参数优先级：
+1. 用户本次明确指定
+2. 配置 `cover.*`
+3. 脚本默认值
 
-封面图特征：浅色背景 + 格子纹理 + 对角线装饰 + 思源黑体 Bold 文字。
+### Step 5: 发送预览（文本 + 封面图）并等待确认
 
-字体文件：`assets/NotoSansCJKsc-Bold.otf`（思源黑体，开源免费无版权）。
+在推送草稿前，必须先给用户看预览：
 
-### 5. 推送到草稿箱
+预览内容至少包含：
+- 标题
+- 摘要
+- 作者
+- 封面图（本次生成的 cover 文件）
+- 正文预览（前 2-3 段或前 200-300 字）
 
-运行发布脚本：
+发送规则：
+- 若当前渠道支持图片，发送“文字 + 封面图”
+- 预览文案必须中文，且包含明确操作提示：
+  - `确认发布`（继续）
+  - `修改封面`（仅重做封面）
+  - `修改正文`（回到正文编辑）
+
+确认策略（默认）：
+- `preview.require_confirm_before_publish = 1` 时，未收到 `preview.confirm_keyword`（默认 `确认发布`）前，不得执行发布
+- 若用户回复 `修改封面`，保留正文，重新执行 Step 4 后再次预览
+- 若用户回复 `修改正文`，回到 Step 1/2 调整后再次预览
+
+### Step 6: 发布前预检
+
+发布前必须检查：
+1. `python3` 可用
+2. `curl` 可用（发布脚本依赖）
+3. `Pillow` 已安装（若需生成封面）
+4. `appid/appsecret` 非空
+5. `article.html` 与封面文件存在
+
+缺项时先修复，不要直接发布。
+
+### Step 7: 推送草稿
+
+使用：
 
 ```bash
 python3 scripts/publish_draft.py \
   --title "文章标题" \
   --author "作者名" \
-  --digest "文章摘要（120字以内）" \
+  --digest "摘要（120字内）" \
   --content-file article.html \
   --cover cover.jpg \
-  --appid <从配置读取> \
-  --appsecret <从配置读取>
+  --appid <appid> \
+  --appsecret <appsecret> \
+  --need-open-comment 1 \
+  --only-fans-can-comment 0
 ```
 
-脚本也支持环境变量 `WX_APPID`、`WX_APPSECRET`、`WX_AUTHOR`。
+评论参数优先级：
+1. 用户这次明确要求
+2. 配置 `publish.*`
+3. 默认值（1 / 0）
 
-脚本会自动：获取 access_token → 上传封面图为永久素材 → 创建草稿。
+### Step 8: 返回结果
 
-### 注意事项
+固定返回：
+- 标题、摘要、作者
+- 封面文件 + 使用的风格/配色
+- 评论开关状态
+- 草稿 `media_id`
+- 下一步：去公众号后台「内容管理 → 草稿箱」预览并发布
 
-- 仅推送到草稿箱，**不会直接发布**
-- 推送后提醒用户去公众号后台预览确认
-- 封面图尺寸 900×383（2.35:1 比例）
-- **不要在 skill 文件中存放敏感信息**，凭证保存在用户本地的 `wechat-article.config.json` 中
+## 安全与边界
+
+- 仅推送草稿箱，不直接群发
+- 凭证只存本地配置，不写进技能文件
+- 任何外发动作（自动发布/群发）必须单独征求用户确认
