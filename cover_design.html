@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 900px; height: 383px; overflow: hidden; background: #0a0e1a; }
+
+.cover {
+  width: 900px;
+  height: 383px;
+  background: linear-gradient(135deg, #060b14 0%, #0d1b2a 60%, #0a1f35 100%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 64px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+}
+
+/* 网格背景 */
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,200,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,200,255,0.04) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* 右侧光晕 */
+.glow-right {
+  position: absolute;
+  right: -80px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,180,255,0.10) 0%, rgba(0,100,200,0.04) 40%, transparent 70%);
+}
+
+/* 左侧竖线装饰 */
+.left-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, transparent 0%, #00c8ff 40%, #0066ff 70%, transparent 100%);
+}
+
+/* 右上角装饰圆 */
+.deco-circle {
+  position: absolute;
+  right: 120px;
+  top: -60px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,200,255,0.12);
+}
+.deco-circle2 {
+  position: absolute;
+  right: 80px;
+  top: -100px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,200,255,0.06);
+}
+
+/* 内容区 */
+.content {
+  position: relative;
+  z-index: 10;
+  max-width: 580px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: #00c8ff;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  padding: 4px 10px;
+  border: 1px solid rgba(0,200,255,0.3);
+  border-radius: 2px;
+}
+
+.title {
+  font-size: 58px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.05;
+  margin-bottom: 22px;
+  letter-spacing: -1px;
+}
+
+.title .highlight {
+  color: #00c8ff;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: rgba(255,255,255,0.42);
+  letter-spacing: 1.5px;
+  line-height: 1.6;
+}
+
+/* 底部账号 */
+.account {
+  position: absolute;
+  bottom: 28px;
+  right: 60px;
+  text-align: right;
+  z-index: 10;
+}
+.account-name {
+  font-size: 13px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 2px;
+}
+.account-line {
+  width: 24px;
+  height: 1px;
+  background: rgba(0,200,255,0.4);
+  margin: 6px 0 0 auto;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="grid"></div>
+  <div class="glow-right"></div>
+  <div class="left-bar"></div>
+  <div class="deco-circle"></div>
+  <div class="deco-circle2"></div>
+
+  <div class="content">
+    <div class="tag">Tutorial · Windows · 2026</div>
+    <div class="title"><span class="highlight">30分钟</span>装好<br>OpenClaw</div>
+    <div class="subtitle">零基础保姆级教程 · 用Trae AI辅助安装</div>
+  </div>
+
+  <div class="account">
+    <div class="account-name">狗哥的胡思乱想</div>
+    <div class="account-line"></div>
+  </div>
+</div>
+</body>
+</html>

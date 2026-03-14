@@ -14,6 +14,8 @@ description: Create, format, and publish WeChat Official Account (微信公众�
   "appid": "公众号 AppID",
   "appsecret": "公众号 AppSecret",
   "author": "默认作者名",
+  "account_name": "公众号名称",
+  "slogan": "公众号 slogan",
   "writing": {
     "perspective": "第一人称",
     "tone": "口语化",
@@ -37,6 +39,10 @@ description: Create, format, and publish WeChat Official Account (微信公众�
     "send_cover_preview": 1,
     "require_confirm_before_publish": 1,
     "confirm_keyword": "确认发布"
+  },
+  "branding": {
+    "header_html": "<页头 HTML，每篇文章顶部自动插入>",
+    "footer_html": "<页脚 HTML，每篇文章底部自动插入>"
   }
 }
 ```
@@ -97,12 +103,13 @@ python3 scripts/create_cover_preview_grid.py
 WeChat Article Progress:
 - [ ] Step 0: 读取/初始化配置
 - [ ] Step 1: 生成文章内容
-- [ ] Step 2: 产出 HTML（内联样式）
+- [ ] Step 2: 产出 HTML（内联样式 + 页头页脚）
 - [ ] Step 3: 校验元数据（标题/摘要/作者）
 - [ ] Step 4: 生成或解析封面图（style × palette）
+- [ ] Step 4.5: 生成正文配图（可选）
 - [ ] Step 5: 发送预览（文本 + 封面图）并等待确认
 - [ ] Step 6: 发布前预检（凭证/依赖/文件）
-- [ ] Step 7: 推送草稿
+- [ ] Step 7: 推送草稿（含配图上传）
 - [ ] Step 8: 返回结果与下一步
 ```
 
@@ -128,11 +135,67 @@ WeChat Article Progress:
 
 ### Step 2: 产出 HTML（内联样式）
 
-严格按 `references/article-style.md`：
-- 外层 `<section>`
-- 正文 `<p>`（16px, line-height 2）
-- 重点 `<strong style="color:#1a73e8;">`
-- 章节间 `<hr>`
+严格按 `references/article-style.md`（2026版排版规范）：
+
+**外层容器：**
+```html
+<section style="font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif; max-width: 677px; margin: 0 auto; padding: 0 20px; color: #3f3f3f; font-size: 15px; line-height: 1.75;">
+```
+
+**关键参数：**
+- 正文字号：15px（14-16px范围）
+- 行间距：1.75倍（1.5-1.75倍范围）
+- 页边距：20px（10-30px范围）
+- 正文颜色：#3f3f3f（不用纯黑）
+- 段间距：1.5em
+
+**正文段落：**
+```html
+<p style="margin: 1.5em 0;">文本内容</p>
+```
+
+**小标题：**
+```html
+<p style="margin: 1.5em 0; font-size: 18px; font-weight: bold; color: #2e6e9e;">章节标题</p>
+```
+
+**重点强调：**
+- 蓝色强调：`<strong style="color:#3daad6;">重点内容</strong>`
+- 深蓝强调：`<strong style="color:#2e6e9e;">重点内容</strong>`
+- 橙色强调（数字/金额）：`<strong style="color:#f79646;">1000万元</strong>`
+
+**分隔线：**
+```html
+<hr style="border: none; border-top: 1px solid #eee; margin: 2em 0;" />
+```
+
+**页头页脚（微信兼容写法）：**
+
+页头使用 `<table>` 布局（已验证在微信中可正常渲染，`<div>` 背景色会被过滤）：
+
+```html
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a3a5c; border-radius: 8px; margin-bottom: 24px;">
+  <tr>
+    <td style="padding: 20px; text-align: center;">
+      <p style="margin: 0 0 6px 0; font-size: 10px; letter-spacing: 3px; color: #7a9ab8; text-align: center;">ORIGINAL CONTENT</p>
+      <p style="margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #ffffff; text-align: center;">狗哥的胡思乱想</p>
+      <p style="margin: 0; font-size: 12px; color: #8ab0cc; text-align: center;">创业 · AI · 那些没人告诉你的事</p>
+    </td>
+  </tr>
+</table>
+```
+
+⚠️ 微信CSS限制（已验证）：
+- `background-color` 在 `<div>`/`<section>` 上会被过滤，必须用 `<table>` 承载背景色
+- `linear-gradient` 渐变不支持，只能用纯色
+- `rgba()` 不支持，只能用 hex 实色
+- `text-align` 必须加在每个 `<p>` 上，不能靠父元素继承
+- `display: flex` 不可靠，用 `<table>` 替代布局
+
+**排版原则：**
+- 每隔三行另起一段
+- 长文居左对齐
+- 短句用 `<br />` 换行，不要每句都开新段落
 - 不输出 markdown，不依赖外部 CSS
 
 ### Step 3: 校验元数据
@@ -147,29 +210,58 @@ WeChat Article Progress:
 2. 配置默认值
 3. 自动生成（标题取主标题，摘要取首段压缩）
 
-### Step 4: 生成或解析封面图（style × palette）
+### Step 4: 生成封面图（HTML+Playwright 截图方案）
+
+**核心原则：每篇文章封面必须根据主题设计，不能重复使用同一套视觉风格。**
 
 优先级：
 1. 用户提供 cover 路径
 2. 项目目录 `imgs/cover.png`（若存在）
-3. 运行 `scripts/create_cover.py` 生成 `cover.jpg`
+3. 用 HTML+Playwright 截图生成（推荐，效果最好）
+4. 降级：运行 `scripts/create_cover.py` 生成（PIL方案，效果较差）
 
-风格：
-- `minimal-grid`
-- `card-editorial`
-- `diagonal-motion`
-- `soft-gradient`
+#### HTML+Playwright 截图方案（推荐）
 
-配色：
-- `blue-tech`
-- `purple-insight`
-- `green-growth`
-- `orange-energy`
-- `rose-story`
-- `slate-pro`
-- `auto`（按 `rotate` 策略选色）
+根据文章主题设计 `cover_design.html`，然后用 Playwright 截图：
 
-生成命令（默认）
+```python
+from playwright.sync_api import sync_playwright
+import os
+
+html_path = os.path.abspath('cover_design.html')
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={'width': 900, 'height': 383})
+    page.goto('file:///' + html_path.replace('\\', '/'))
+    page.wait_for_timeout(500)
+    page.screenshot(path='cover.jpg', clip={'x':0,'y':0,'width':900,'height':383})
+    browser.close()
+```
+
+**封面尺寸：900×383px（微信公众号标准比例）**
+
+#### 封面设计原则
+
+每篇文章根据主题选择不同的视觉方向：
+
+| 文章类型 | 推荐风格 | 配色方向 |
+|---------|---------|---------|
+| 科技/教程 | 深色科技网格 + 几何装饰 | 深蓝底 + 青色高亮 |
+| 创业/商业 | 简洁卡片 + 大字排版 | 白底/深色 + 品牌色 |
+| AI/未来 | 渐变光晕 + 粒子感 | 紫蓝渐变 |
+| 生活/故事 | 温暖插画风 | 暖色系 |
+
+**必须包含：**
+- 文章主标题（大字，视觉重心）
+- 副标题或定位标签
+- 账号署名（低调放置）
+
+**禁止：**
+- 每篇文章用同一套模板
+- 背景纯色无设计感
+- 字体太小看不清
+
+#### PIL 降级方案
 
 ```bash
 python3 scripts/create_cover.py \
@@ -182,10 +274,36 @@ python3 scripts/create_cover.py \
   --output cover.jpg
 ```
 
-命令参数优先级：
-1. 用户本次明确指定
-2. 配置 `cover.*`
-3. 脚本默认值
+可用风格：`minimal-grid` / `card-editorial` / `diagonal-motion` / `soft-gradient`
+可用配色：`blue-tech` / `purple-insight` / `green-growth` / `orange-energy` / `rose-story` / `slate-pro`
+
+### Step 4.5: 生成正文配图（可选）
+
+根据文章内容，可以生成配图增强可读性：
+
+**配图类型：**
+1. **数据可视化图表**：政策对比表、数据统计图
+2. **概念示意图**：流程图、架构图、关系图
+3. **场景插图**：用Python PIL生成或AI生成
+
+**生成方式：**
+- 使用Python PIL库生成表格、图表
+- 使用matplotlib生成数据可视化
+- 使用AI工具（如Gemini）生成概念图
+
+**配图规范：**
+- 尺寸：宽度建议900-1200px
+- 格式：JPG（质量95）
+- 文件名：描述性命名（如 `policy_table.jpg`、`opc_concept.jpg`）
+- 保存位置：技能目录下
+
+**插入方式：**
+在 `article.html` 中使用占位符：
+```html
+<!-- IMAGE_POLICY_TABLE -->
+```
+
+发布时脚本会自动上传图片并替换占位符。
 
 ### Step 5: 发送预览（文本 + 封面图）并等待确认
 
@@ -213,29 +331,58 @@ python3 scripts/create_cover.py \
 ### Step 6: 发布前预检
 
 发布前必须检查：
-1. `python3` 可用
-2. `curl` 可用（发布脚本依赖）
-3. `Pillow` 已安装（若需生成封面）
-4. `appid/appsecret` 非空
-5. `article.html` 与封面文件存在
+1. `python` 可用
+2. `Pillow` 已安装（若需生成封面或配图）
+3. `appid/appsecret` 非空
+4. `article.html` 与封面文件存在
 
 缺项时先修复，不要直接发布。
+
+注：发布脚本已改用纯Python实现，不再依赖 `curl`。
 
 ### Step 7: 推送草稿
 
 使用：
 
 ```bash
-python3 scripts/publish_draft.py \
+python scripts/publish_draft.py \
   --title "文章标题" \
   --author "作者名" \
   --digest "摘要（120字内）" \
   --content-file article.html \
   --cover cover.jpg \
+  --opc-concept-img opc_concept.jpg \
+  --policy-table-img policy_table.jpg \
+  --opc-flow-img opc_flow.jpg \
   --appid <appid> \
   --appsecret <appsecret> \
   --need-open-comment 1 \
   --only-fans-can-comment 0
+```
+
+**配图参数（可选）：**
+- `--opc-concept-img`：OPC概念图
+- `--policy-table-img`：政策对比表
+- `--opc-flow-img`：流程图
+- 其他自定义配图
+
+脚本会自动：
+1. 上传封面图到微信素材库（获取 `thumb_media_id`）
+2. 上传正文配图到微信服务器（获取图片URL）
+3. 替换 `article.html` 中的图片占位符（`<!-- IMAGE_XXX -->`）
+4. 创建草稿
+
+**图片占位符规则：**
+在 `article.html` 中使用注释占位符：
+```html
+<!-- IMAGE_OPC_CONCEPT -->
+<!-- IMAGE_POLICY_TABLE -->
+<!-- IMAGE_OPC_FLOW -->
+```
+
+发布脚本会自动替换为：
+```html
+<p style="text-align: center;"><img src="微信图片URL" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" alt="图片描述"/></p>
 ```
 
 评论参数优先级：

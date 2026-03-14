@@ -67,30 +67,75 @@ def get_access_token(appid, appsecret):
 
 
 def upload_cover(token, image_path):
-    if not shutil_which("curl"):
-        fail("curl not found. Please install curl first.")
+    """Upload cover image using pure Python (no curl dependency)."""
+    import mimetypes
+    import uuid
 
-    cmd = [
-        "curl",
-        "-sS",
-        "-X",
-        "POST",
-        f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={token}&type=image",
-        "-F",
-        f"media=@{image_path}",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        fail(f"upload cover failed: {result.stderr.strip() or result.stdout.strip()}")
+    url = f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={token}&type=image"
+    boundary = uuid.uuid4().hex
+    mime_type = mimetypes.guess_type(image_path)[0] or "image/jpeg"
+    filename = os.path.basename(image_path)
+
+    with open(image_path, "rb") as f:
+        file_data = f.read()
+
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="media"; filename="{filename}"\r\n'
+        f"Content-Type: {mime_type}\r\n\r\n"
+    ).encode("utf-8") + file_data + f"\r\n--{boundary}--\r\n".encode("utf-8")
 
     try:
-        data = json.loads(result.stdout)
-    except Exception:
-        fail(f"upload cover returned non-json: {result.stdout[:300]}")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        fail(f"upload cover failed: {e}")
 
     if "media_id" not in data:
         fail(f"upload cover failed: {data}")
     return data["media_id"]
+
+
+def upload_image_to_content(token, image_path):
+    """Upload image for article content using pure Python (no curl dependency)."""
+    import mimetypes
+    import uuid
+
+    url = f"https://api.weixin.qq.com/cgi-bin/media/uploadimg?access_token={token}"
+    boundary = uuid.uuid4().hex
+    mime_type = mimetypes.guess_type(image_path)[0] or "image/jpeg"
+    filename = os.path.basename(image_path)
+
+    with open(image_path, "rb") as f:
+        file_data = f.read()
+
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="media"; filename="{filename}"\r\n'
+        f"Content-Type: {mime_type}\r\n\r\n"
+    ).encode("utf-8") + file_data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        fail(f"upload image to content failed: {e}")
+
+    if "url" not in data:
+        fail(f"upload image to content failed: {data}")
+    return data["url"]
 
 
 def create_draft(token, title, author, digest, content, thumb_media_id, need_open_comment, only_fans_can_comment):
@@ -138,6 +183,15 @@ def validate_inputs(args, appid, appsecret):
 
     ensure_file(args.content_file, "content file")
     ensure_file(args.cover, "cover image")
+    
+    if args.header_img:
+        ensure_file(args.header_img, "header image")
+    if args.opc_concept_img:
+        ensure_file(args.opc_concept_img, "OPC concept image")
+    if args.policy_table_img:
+        ensure_file(args.policy_table_img, "policy table image")
+    if args.opc_flow_img:
+        ensure_file(args.opc_flow_img, "OPC flow image")
 
     if len(args.title.strip()) == 0:
         fail("title cannot be empty")
@@ -159,6 +213,10 @@ if __name__ == "__main__":
     parser.add_argument("--digest", default="", help="文章摘要，建议 120 字以内")
     parser.add_argument("--content-file", required=True, help="HTML 内容文件路径")
     parser.add_argument("--cover", required=True, help="封面图路径")
+    parser.add_argument("--header-img", help="页眉图片路径")
+    parser.add_argument("--opc-concept-img", help="OPC概念图路径")
+    parser.add_argument("--policy-table-img", help="政策对比图路径")
+    parser.add_argument("--opc-flow-img", help="OPC流程图路径")
     parser.add_argument("--appid", default=None, help="AppID（或设置 WX_APPID 环境变量）")
     parser.add_argument("--appsecret", default=None, help="AppSecret（或设置 WX_APPSECRET 环境变量）")
     parser.add_argument("--need-open-comment", type=int, default=1, help="是否开启评论：1 开启，0 关闭")
@@ -174,13 +232,37 @@ if __name__ == "__main__":
     with open(args.content_file, "r", encoding="utf-8") as f:
         content = f.read().strip()
 
-    print("[1/3] Getting access token...")
+    print("[1/4] Getting access token...")
     token = get_access_token(appid, appsecret)
 
-    print("[2/3] Uploading cover image...")
+    print("[2/4] Uploading cover image...")
     thumb_media_id = upload_cover(token, args.cover)
+    
+    header_url = ""
+    if args.header_img:
+        print("    Uploading header image...")
+        header_url = upload_image_to_content(token, args.header_img)
+        content = content.replace("<!-- IMAGE_HEADER -->", f'<p style="text-align: center;"><img src="{header_url}" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" alt="页眉"/></p>')
 
-    print("[3/3] Creating draft...")
+    opc_concept_url = ""
+    if args.opc_concept_img:
+        print("    Uploading OPC concept image...")
+        opc_concept_url = upload_image_to_content(token, args.opc_concept_img)
+        content = content.replace("<!-- IMAGE_OPC_CONCEPT -->", f'<p style="text-align: center;"><img src="{opc_concept_url}" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" alt="OPC概念图"/></p>')
+
+    policy_table_url = ""
+    if args.policy_table_img:
+        print("    Uploading policy table image...")
+        policy_table_url = upload_image_to_content(token, args.policy_table_img)
+        content = content.replace("<!-- IMAGE_POLICY_TABLE -->", f'<p style="text-align: center;"><img src="{policy_table_url}" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" alt="政策对比图"/></p>')
+
+    opc_flow_url = ""
+    if args.opc_flow_img:
+        print("    Uploading OPC flow image...")
+        opc_flow_url = upload_image_to_content(token, args.opc_flow_img)
+        content = content.replace("<!-- IMAGE_OPC_FLOW -->", f'<p style="text-align: center;"><img src="{opc_flow_url}" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" alt="OPC流程图"/></p>')
+
+    print("[3/4] Creating draft...")
     result = create_draft(
         token=token,
         title=args.title,
@@ -198,4 +280,9 @@ if __name__ == "__main__":
         "media_id": result.get("media_id"),
         "need_open_comment": args.need_open_comment,
         "only_fans_can_comment": args.only_fans_can_comment,
+        "uploaded_images": {
+            "opc_concept": opc_concept_url,
+            "policy_table": policy_table_url,
+            "opc_flow": opc_flow_url,
+        }
     }, ensure_ascii=False))
