@@ -169,10 +169,11 @@ python3 scripts/create_cover_preview_grid.py
 | "别用这种表达" | 加入 avoid_phrases |
 | "我喜欢这种感觉" | 提取特征加入 preferred |
 
-**更新规则：**
+**更新规则（建议确认模式）：**
 - 每次创作结束后，检查是否有新的偏好信号
-- 如果有，更新 `references/style-dna.md` 并在更新日志中记录
-- 不要覆盖用户手动调整过的字段
+- 如果有，**先向用户展示建议的 DNA 更新内容**，用户确认后才写入
+- 默认不自动覆盖，防止"DNA 漂移"（把偶然偏好当成固定风格）
+- 用户手动调整过的字段优先级最高，不会被自动建议覆盖
 
 ### 反模板化检测
 
@@ -252,6 +253,19 @@ WeChat Article Progress:
 
 ### Step 1: 生成文章内容（基于风格DNA）
 
+#### 1a. 选择文章结构
+
+**不要默认使用"开头 → 3-5小节 → 结尾"。** 根据 `references/structures.md` 中的选择规则，按主题类型选择结构原型：
+- 赚钱/变现 → 时间线叙事
+- 技术/工具 → 标准分节 或 清单体
+- 观点/洞察 → 问答对话体
+- 经验/复盘 → 时间线叙事
+- 推荐/盘点 → 清单体
+
+**反重复规则：** 检查 DNA 中 `recent_articles` 的最近2篇结构，如果相同则强制切换。
+
+#### 1b. 加载风格DNA和个人素材
+
 **如果存在 `references/style-dna.md`：**
 - 严格按照 DNA 中定义的风格特征生成内容
 - 模仿 DNA 中记录的句式、节奏和表达习惯
@@ -259,13 +273,35 @@ WeChat Article Progress:
 - 检查 `recent_golden_phrases`，确保不重复使用金句
 - 根据主题类型，参考 DNA 中的 `主题风格映射` 调整语言风格
 
+**如果存在 `references/story-bank.md`：**
+- 优先从用户的真实经历库中选取与主题相关的素材
+- 用真实观点替代 AI 编造的观点
+- 使用用户的口头禅和语言习惯
+- 参考用户的情绪色板调整文章情绪基调
+
 **如果不存在 DNA：**
 - 按配置中的 `writing.*` 产出正文
+
+#### 1c. 内容安全意识
+
+生成时主动遵守 `references/content-safety.md` 中的规则：
+- 识别当前主题是否属于高/中风险话题
+- 高风险话题自动切换为安全写法（"信息整理"模式，不做主观建议）
+- 涉及具体数据时，区分"硬事实"和"软观点"：
+  - 硬事实（具体数字、排名、统计）：必须标注来源，无来源则改为模糊表述
+  - 软观点（个人判断、经验分享）：可以直接表达，但用"个人经验"限定
+- 禁止使用 `content-safety.md` 中列出的禁止声明
+
+#### 1d. 降低模板感
+
+- 段落长度要有变化：短段（1-2句）和长段（5-8句）交替出现
+- 不要每段都在"输出价值"，适当留白和过渡
+- 每隔 400-600 字设置一个"小钩子"（反问、悬念、转折），保持阅读动力
+- 如果有个人素材库，在合适位置插入真实细节增加"人味"
 
 约束：
 - 标题建议 ≤ 20 个中文字符（传播友好）
 - 正文建议 ≤ 1000~2500 字（按用户配置）
-- 结构优先：开场、3-5 个小节、结尾行动建议
 
 ### Step 2: 产出 HTML（内联样式 + 页头页脚）
 
@@ -352,6 +388,16 @@ WeChat Article Progress:
 3. `Playwright` 及其浏览器驱动已安装（若使用 HTML 模板封面）
 4. `appid/appsecret` 非空
 5. `article.html` 与封面文件存在
+6. **内容安全校验**（必须执行）：
+
+```bash
+python3 scripts/validate_article.py --content-file article.html
+```
+
+校验结果处理：
+- `risk_score = 0`，`can_publish = true` → 直接进入 Step 7
+- `needs_review = true`（有警告）→ 将校验报告展示给用户，标注待核实的数据和中风险内容，用户确认后才能继续
+- `can_publish = false`（有错误）→ **阻断发布**，展示具体问题，要求用户修改后重新校验
 
 缺项时先修复，不要直接发布。
 
@@ -413,8 +459,12 @@ wechat-article-skill/
 │   └── cover-style-palette-preview-grid.jpg
 ├── references/
 │   ├── article-style.md              (排版风格索引)
+│   ├── structures.md                 (文章结构原型库)
+│   ├── content-safety.md             (内容安全与合规指南)
 │   ├── style-dna-template.md         (风格DNA空白模板)
+│   ├── story-bank-template.md        (个人素材库模板)
 │   ├── style-dna.md                  (用户风格DNA，系统生成)
+│   ├── story-bank.md                 (用户个人素材库)
 │   ├── my-articles/                  (用户参考文章)
 │   │   └── README.md
 │   └── styles/
@@ -429,6 +479,7 @@ wechat-article-skill/
     ├── create_cover.py               (封面生成脚本)
     ├── create_cover_preview_grid.py
     ├── publish_draft.py              (草稿发布脚本)
+    ├── validate_article.py           (发布前内容校验)
     └── illustrations/
         ├── generate_concept.py       (概念示意图生成)
         ├── generate_flow.py          (流程图生成)

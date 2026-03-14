@@ -1,5 +1,6 @@
 # 用户特定文件（不应提交到公共仓库）
 references/style-dna.md
+references/story-bank.md
 references/my-articles/*.md
 !references/my-articles/README.md
 
