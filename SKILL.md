@@ -14,18 +14,22 @@ description: Create, format, and publish WeChat Official Account (微信公众�
   "appid": "公众号 AppID",
   "appsecret": "公众号 AppSecret",
   "author": "默认作者名",
+  "account_name": "公众号名称",
+  "slogan": "公众号 Slogan",
   "writing": {
     "perspective": "第一人称",
     "tone": "口语化",
     "length": "1500-2500字",
     "direction": "科技/AI/产品思考",
-    "keywords_style": "短句为主，一行不超过30字"
+    "keywords_style": "短句为主，一行不超过30字",
+    "article_style": "default"
   },
   "publish": {
     "need_open_comment": 1,
     "only_fans_can_comment": 0
   },
   "cover": {
+    "html_template": null,
     "default_style": "minimal-grid",
     "palette": "auto",
     "rotate": "sequential",
@@ -37,6 +41,10 @@ description: Create, format, and publish WeChat Official Account (微信公众�
     "send_cover_preview": 1,
     "require_confirm_before_publish": 1,
     "confirm_keyword": "确认发布"
+  },
+  "branding": {
+    "header_html": "",
+    "footer_html": ""
   }
 }
 ```
@@ -45,11 +53,16 @@ description: Create, format, and publish WeChat Official Account (微信公众�
 
 若配置不存在，先问完并写入：
 1. `appid` / `appsecret`
-2. 默认作者
-3. 写作风格（视角、语气、长度、方向）
-4. 评论开关（默认：开放评论=1，仅粉丝可评=0）
-5. 优先使用内置预览图（`assets/cover-style-palette-preview-grid.jpg`）展示风格×配色，让用户选择默认风格
-6. 写入封面策略（默认 `palette=auto`, `rotate=sequential`, `seed=title`）
+2. `account_name` / `slogan` (必填)
+3. 默认作者
+4. 写作风格（视角、语气、长度、方向）
+5. 排版风格（默认 `default`，可选 `gougestyle`）
+6. 评论开关（默认：开放评论=1，仅粉丝可评=0）
+7. 封面策略：
+   - 先询问用户是否使用 HTML 封面模板 (阿凯封面模板/狗哥封面模板)。
+     - 如果是，让用户选择 `akai-cover` 或 `gouge-cover`，并写入 `cover.html_template`。
+     - 如果否，则展示 `assets/cover-style-palette-preview-grid.jpg`，让用户选择 PIL 封面样式，并写入 `cover.default_style`。
+   - 写入封面策略（默认 `palette=auto`, `rotate=sequential`, `seed=title`）
 
 若内置预览图不存在或需要更新，再执行：
 
@@ -97,9 +110,10 @@ python3 scripts/create_cover_preview_grid.py
 WeChat Article Progress:
 - [ ] Step 0: 读取/初始化配置
 - [ ] Step 1: 生成文章内容
-- [ ] Step 2: 产出 HTML（内联样式）
+- [ ] Step 2: 产出 HTML（内联样式 + 页头页脚）
 - [ ] Step 3: 校验元数据（标题/摘要/作者）
-- [ ] Step 4: 生成或解析封面图（style × palette）
+- [ ] Step 4: 生成封面图
+- [ ] Step 4.5: 生成正文配图（可选）
 - [ ] Step 5: 发送预览（文本 + 封面图）并等待确认
 - [ ] Step 6: 发布前预检（凭证/依赖/文件）
 - [ ] Step 7: 推送草稿
@@ -111,11 +125,6 @@ WeChat Article Progress:
 - 读取 `wechat-article.config.json`
 - 不存在则进入首次配置并写入
 - 配置存在但缺字段：只补缺失字段，不覆盖用户已有偏好
-- 若 `cover.default_style` 缺失：
-  1) 优先使用 `assets/cover-style-palette-preview-grid.jpg` 作为预览图
-  2) 若该图不存在，再运行 `python3 scripts/create_cover_preview_grid.py` 生成
-  3) 给用户看图并让其选择默认风格
-  4) 把选择写回 `cover.default_style`
 
 ### Step 1: 生成文章内容
 
@@ -126,14 +135,15 @@ WeChat Article Progress:
 - 正文建议 ≤ 1000~2500 字（按用户配置）
 - 结构优先：开场、3-5 个小节、结尾行动建议
 
-### Step 2: 产出 HTML（内联样式）
+### Step 2: 产出 HTML（内联样式 + 页头页脚）
 
-严格按 `references/article-style.md`：
+严格按 `references/styles/{article_style}.md` 定义的排版规范。
 - 外层 `<section>`
-- 正文 `<p>`（16px, line-height 2）
-- 重点 `<strong style="color:#1a73e8;">`
+- 正文 `<p>`
+- 重点 `<strong>`
 - 章节间 `<hr>`
 - 不输出 markdown，不依赖外部 CSS
+- 如果配置了 `branding.header_html` 或 `branding.footer_html`，将其插入到文章内容 HTML 的对应位置。
 
 ### Step 3: 校验元数据
 
@@ -147,45 +157,37 @@ WeChat Article Progress:
 2. 配置默认值
 3. 自动生成（标题取主标题，摘要取首段压缩）
 
-### Step 4: 生成或解析封面图（style × palette）
+### Step 4: 生成封面图
+
+**核心原则：每篇文章封面必须根据主题设计，不能重复使用同一套视觉风格。**
 
 优先级：
-1. 用户提供 cover 路径
-2. 项目目录 `imgs/cover.png`（若存在）
-3. 运行 `scripts/create_cover.py` 生成 `cover.jpg`
+1. 用户提供 `cover_path`
+2. 使用 `cover.html_template` 指定的 HTML 模板，结合 Playwright 截图（推荐）
+   - 可用模板：`akai-cover` (阿凯封面模板), `gouge-cover` (狗哥封面模板)
+3. 回退到 PIL 方案，使用 `cover.default_style` 和 `cover.palette`
 
-风格：
-- `minimal-grid`
-- `card-editorial`
-- `diagonal-motion`
-- `soft-gradient`
+#### HTML + Playwright 截图方案 (推荐)
 
-配色：
-- `blue-tech`
-- `purple-insight`
-- `green-growth`
-- `orange-energy`
-- `rose-story`
-- `slate-pro`
-- `auto`（按 `rotate` 策略选色）
+根据 `cover.html_template` 配置，渲染 `/templates/covers/{template_name}.html`，并使用 Playwright 截图。
+- 参数：`--html-template`, `--title`, `--subtitle`, `--account-name`, `--slogan`, `--tag`
 
-生成命令（默认）
+#### PIL 降级方案
 
-```bash
-python3 scripts/create_cover.py \
-  --title "主标题" \
-  --subtitle "副标题" \
-  --style "minimal-grid" \
-  --palette "auto" \
-  --rotate "sequential" \
-  --seed "主标题" \
-  --output cover.jpg
-```
+如果未指定 `cover.html_template`，则使用 `scripts/create_cover.py` 进行 PIL 图像生成。
+- 参数：`--title`, `--subtitle`, `--style`, `--palette`, `--rotate`, `--seed`
 
 命令参数优先级：
 1. 用户本次明确指定
 2. 配置 `cover.*`
 3. 脚本默认值
+
+### Step 4.5: 生成正文配图（可选）
+
+根据文章内容，可以生成配图增强可读性。
+- 使用 `scripts/illustrations/` 目录下的脚本生成图片（例如：`generate_concept.py`, `generate_flow.py`, `generate_table.py`）。
+- 生成的图片需通过 `publish_draft.py` 的 `--content-img KEY=PATH` 参数上传。
+- 在 `article.html` 中使用 `<!-- IMAGE_KEY -->` 占位符，脚本会自动替换为上传后的图片 URL。
 
 ### Step 5: 发送预览（文本 + 封面图）并等待确认
 
@@ -214,8 +216,8 @@ python3 scripts/create_cover.py \
 
 发布前必须检查：
 1. `python3` 可用
-2. `curl` 可用（发布脚本依赖）
-3. `Pillow` 已安装（若需生成封面）
+2. `Pillow` 已安装（若需生成封面或配图）
+3. `Playwright` 及其浏览器驱动已安装（若使用 HTML 模板封面）
 4. `appid/appsecret` 非空
 5. `article.html` 与封面文件存在
 
@@ -223,7 +225,7 @@ python3 scripts/create_cover.py \
 
 ### Step 7: 推送草稿
 
-使用：
+使用 `scripts/publish_draft.py`。
 
 ```bash
 python3 scripts/publish_draft.py \
@@ -235,7 +237,9 @@ python3 scripts/publish_draft.py \
   --appid <appid> \
   --appsecret <appsecret> \
   --need-open-comment 1 \
-  --only-fans-can-comment 0
+  --only-fans-can-comment 0 \
+  --header-img <页眉图片路径> \
+  --content-img <KEY1=PATH1> --content-img <KEY2=PATH2>
 ```
 
 评论参数优先级：
@@ -250,6 +254,7 @@ python3 scripts/publish_draft.py \
 - 封面文件 + 使用的风格/配色
 - 评论开关状态
 - 草稿 `media_id`
+- 已上传的正文图片 URL 列表
 - 下一步：去公众号后台「内容管理 → 草稿箱」预览并发布
 
 ## 安全与边界
@@ -257,3 +262,33 @@ python3 scripts/publish_draft.py \
 - 仅推送草稿箱，不直接群发
 - 凭证只存本地配置，不写进技能文件
 - 任何外发动作（自动发布/群发）必须单独征求用户确认
+
+## 项目结构
+
+```text
+wechat-article-skill/
+├── SKILL.md
+├── README.md
+├── assets/
+│   ├── NotoSansCJKsc-Bold.otf
+│   └── cover-style-palette-preview-grid.jpg
+├── references/
+│   ├── article-style.md          (排版风格索引)
+│   └── styles/
+│       ├── default.md            (默认排版风格)
+│       └── gougestyle.md         (狗哥排版风格)
+├── templates/
+│   └── covers/
+│       ├── akai-cover.html       (阿凯封面模板)
+│       └── gouge-cover.html      (狗哥封面模板)
+└── scripts/
+    ├── font_utils.py             (跨平台字体工具)
+    ├── create_cover.py           (封面生成脚本)
+    ├── create_cover_preview_grid.py
+    ├── publish_draft.py          (草稿发布脚本)
+    └── illustrations/
+        ├── generate_concept.py   (概念示意图生成)
+        ├── generate_flow.py      (流程图生成)
+        ├── generate_header.py    (页眉图片生成)
+        └── generate_table.py     (数据表格图生成)
+```

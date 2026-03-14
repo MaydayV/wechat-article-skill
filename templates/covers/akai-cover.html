@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 900px; height: 383px; overflow: hidden; background: #fafbfc; }
+
+.cover {
+  width: 900px;
+  height: 383px;
+  background: #fafbfc;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 72px 0 56px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+}
+
+/* 左侧渐变竖线 */
+.left-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #3daad6 0%, #2e6e9e 50%, #1a3a5c 100%);
+}
+
+/* 右下角淡色装饰圆 */
+.deco-circle {
+  position: absolute;
+  right: -60px;
+  bottom: -80px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: 1px solid rgba(61,170,214,0.08);
+}
+
+/* 内容区 */
+.content {
+  position: relative;
+  z-index: 10;
+  max-width: 720px;
+  padding-left: 24px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #3daad6;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  padding: 3px 8px;
+  border: 1px solid rgba(61,170,214,0.25);
+  border-radius: 2px;
+}
+
+.title {
+  font-size: 52px;
+  font-weight: 900;
+  color: #1a1a2e;
+  line-height: 1.1;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 17px;
+  color: #7a8a9e;
+  letter-spacing: 1px;
+  line-height: 1.5;
+}
+
+/* 底部账号 */
+.account {
+  position: absolute;
+  bottom: 24px;
+  right: 48px;
+  text-align: right;
+  z-index: 10;
+}
+.account-name {
+  font-size: 12px;
+  color: #b0bec5;
+  letter-spacing: 2px;
+}
+.account-line {
+  width: 20px;
+  height: 1px;
+  background: rgba(61,170,214,0.3);
+  margin: 5px 0 0 auto;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="left-bar"></div>
+  <div class="deco-circle"></div>
+
+  <div class="content">
+    <div class="tag">{{tag}}</div>
+    <div class="title">{{title}}</div>
+    <div class="subtitle">{{subtitle}}</div>
+  </div>
+
+  <div class="account">
+    <div class="account-name">{{account_name}}</div>
+    <div class="account-line"></div>
+  </div>
+</div>
+</body>
+</html>

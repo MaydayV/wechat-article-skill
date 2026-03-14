@@ -18,7 +18,11 @@ import argparse
 import os
 import random
 import sys
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
+
+# 添加 scripts 目录到 path 以便导入 font_utils
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import font_utils
 
 
 def clamp(v: int) -> int:
@@ -195,16 +199,33 @@ def draw_title_block(draw, w, h, title, subtitle, style, palette, font_large, fo
         title_y = h // 2 - 58
         sub_y = h // 2 + 18
 
-    bbox = draw.textbbox((0, 0), title, font=font_large)
-    tw = bbox[2] - bbox[0]
-    tx = (w - tw) / 2
-    draw.text((tx, title_y), title, fill=palette["text"], font=font_large)
+    # Calculate text bounding box more accurately
+    # For multiline text, `textbbox` returns a box for the whole block.
+    # We need to split lines and get individual line widths for proper centering.
+    title_lines = title.split('\n')
+    max_title_width = 0
+    for line in title_lines:
+        bbox = draw.textbbox((0, 0), line, font=font_large)
+        max_title_width = max(max_title_width, bbox[2] - bbox[0])
+    
+    current_y = title_y - (len(title_lines) - 1) * font_large.size / 2 # Adjust starting Y for multi-line title
+
+    for line in title_lines:
+        bbox = draw.textbbox((0, 0), line, font=font_large)
+        tw = bbox[2] - bbox[0]
+        tx = (w - tw) / 2
+        draw.text((tx, current_y), line, fill=palette["text"], font=font_large)
+        current_y += font_large.size # Move to next line
 
     if subtitle:
-        bbox2 = draw.textbbox((0, 0), subtitle, font=font_small)
-        tw2 = bbox2[2] - bbox2[0]
-        tx2 = (w - tw2) / 2
-        draw.text((tx2, sub_y), subtitle, fill=palette["sub"], font=font_small)
+        subtitle_lines = subtitle.split('\n')
+        current_y = sub_y - (len(subtitle_lines) - 1) * font_small.size / 2
+        for line in subtitle_lines:
+            bbox2 = draw.textbbox((0, 0), line, font=font_small)
+            tw2 = bbox2[2] - bbox2[0]
+            tx2 = (w - tw2) / 2
+            draw.text((tx2, current_y), line, fill=palette["sub"], font=font_small)
+            current_y += font_small.size
 
 
 def pick_palette(name: str, strategy: str, seed: str):
@@ -225,45 +246,129 @@ def pick_palette(name: str, strategy: str, seed: str):
     return k, PALETTES[k]
 
 
-def create_cover(title, subtitle, output, style, palette_name, rotate, seed, bg_override, text_override, sub_override, font_path):
+def render_html_cover(
+    template_path: str,
+    output_path: str,
+    title: str,
+    subtitle: str,
+    account_name: str,
+    slogan: str,
+    tag: str,
+):
+    """
+    使用 Playwright 渲染 HTML 模板并截图。
+    """
+    from playwright.sync_api import sync_playwright
+    from jinja2 import Environment, FileSystemLoader
+
+    template_dir = os.path.dirname(template_path)
+    template_filename = os.path.basename(template_path)
+
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template(template_filename)
+
+    # 渲染 HTML 模板
+    rendered_html = template.render(
+        title=title,
+        subtitle=subtitle,
+        account_name=account_name,
+        slogan=slogan,
+        tag=tag,
+    )
+    
+    # 写入临时文件供 Playwright 读取
+    # 确保 temp_cover.html 在 output_path 同一目录下，方便 Playwright 定位相对资源
+    temp_html_path = os.path.join(os.path.dirname(output_path), "temp_cover.html")
+    with open(temp_html_path, "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 900, "height": 383})
+            # 使用 file:// 协议加载本地 HTML 文件
+            page.goto("file://" + os.path.abspath(temp_html_path).replace("\\", "/"))
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(500)  # 留一些时间给字体加载和渲染
+            page.screenshot(path=output_path, quality=95)
+            browser.close()
+    finally:
+        if os.path.exists(temp_html_path):
+            os.remove(temp_html_path)
+
+def create_cover(
+    title: str,
+    subtitle: str,
+    output: str,
+    html_template_path: Optional[str],
+    style: str,
+    palette_name: str,
+    rotate: str,
+    seed: str,
+    bg_override: Optional[str],
+    text_override: Optional[str],
+    sub_override: Optional[str],
+    font_path: Optional[str],
+    account_name: str = "",
+    slogan: str = "",
+    tag: str = "",
+):
     from PIL import Image, ImageDraw, ImageFont
 
-    if style not in STYLES:
-        raise ValueError(f"Unknown style: {style}")
+    if html_template_path:
+        # 使用 HTML 模板渲染
+        render_html_cover(
+            template_path=html_template_path,
+            output_path=output,
+            title=title,
+            subtitle=subtitle,
+            account_name=account_name,
+            slogan=slogan,
+            tag=tag,
+        )
+        # HTML 模板不返回 palette 名称，返回模板名
+        return os.path.basename(html_template_path)
+    else:
+        # 回退到 PIL 渲染
+        if style not in STYLES:
+            raise ValueError(f"Unknown style: {style}")
 
-    selected_palette_name, palette = pick_palette(palette_name, rotate, seed)
-    palette = dict(palette)
+        selected_palette_name, palette = pick_palette(palette_name, rotate, seed)
+        palette = dict(palette)
 
-    # compatible overrides
-    if bg_override:
-        palette["bg"] = parse_rgb(bg_override)
-    if text_override:
-        palette["text"] = parse_rgb(text_override)
-    if sub_override:
-        palette["sub"] = parse_rgb(sub_override)
+        # compatible overrides
+        if bg_override:
+            palette["bg"] = parse_rgb(bg_override)
+        if text_override:
+            palette["text"] = parse_rgb(text_override)
+        if sub_override:
+            palette["sub"] = parse_rgb(sub_override)
 
-    width, height = 900, 383
-    img = Image.new("RGB", (width, height), color=palette["bg"])
-    draw = ImageDraw.Draw(img)
+        width, height = 900, 383
+        img = Image.new("RGB", (width, height), color=palette["bg"])
+        draw = ImageDraw.Draw(img)
 
-    if style == "minimal-grid":
-        style_minimal_grid(draw, width, height, palette)
-    elif style == "card-editorial":
-        style_card_editorial(draw, width, height, palette)
-    elif style == "diagonal-motion":
-        style_diagonal_motion(draw, width, height, palette)
-    elif style == "soft-gradient":
-        style_soft_gradient(img, draw, width, height, palette)
+        if style == "minimal-grid":
+            style_minimal_grid(draw, width, height, palette)
+        elif style == "card-editorial":
+            style_card_editorial(draw, width, height, palette)
+        elif style == "diagonal-motion":
+            style_diagonal_motion(draw, width, height, palette)
+        elif style == "soft-gradient":
+            style_soft_gradient(img, draw, width, height, palette)
 
-    if not os.path.exists(font_path):
-        raise FileNotFoundError(f"Font not found: {font_path}")
+        # 使用 font_utils 查找字体
+        try:
+            actual_font_path = font_utils.find_chinese_font(preferred=font_path)
+        except FileNotFoundError as e:
+            raise RuntimeError(f"无法找到可用的中文字体: {e}")
 
-    font_large = ImageFont.truetype(font_path, 52)
-    font_small = ImageFont.truetype(font_path, 28)
-    draw_title_block(draw, width, height, title, subtitle, style, palette, font_large, font_small)
+        font_large = ImageFont.truetype(actual_font_path, 52)
+        font_small = ImageFont.truetype(actual_font_path, 28)
+        draw_title_block(draw, width, height, title, subtitle, style, palette, font_large, font_small)
 
-    img.save(output, "JPEG", quality=95)
-    return selected_palette_name
+        img.save(output, "JPEG", quality=95)
+        return selected_palette_name
 
 
 def print_presets():
@@ -293,27 +398,38 @@ if __name__ == "__main__":
     parser.add_argument("--text-color", default=None, help="覆盖标题文字色 R,G,B")
     parser.add_argument("--sub-color", default=None, help="覆盖副标题文字色 R,G,B")
 
-    parser.add_argument("--font", default=None, help="字体文件路径（默认 assets/NotoSansCJKsc-Bold.otf）")
+    parser.add_argument("--font", default=None, help="字体文件路径（默认通过 font_utils 查找）")
+    # HTML 模板相关参数
+    parser.add_argument("--html-template", default=None, help="HTML 封面模板路径")
+    parser.add_argument("--account-name", default="", help="公众号名称（用于 HTML 模板）")
+    parser.add_argument("--slogan", default="", help="公众号 Slogan（用于 HTML 模板）")
+    parser.add_argument("--tag", default="", help="分类标签（用于 HTML 模板）")
+
     args = parser.parse_args()
 
     if args.list_presets:
         print_presets()
         sys.exit(0)
 
-    if not args.title.strip():
-        print("Error: --title is required unless using --list-presets", file=sys.stderr)
+    # 如果是 HTML 模板，标题可以从模板中来，所以不强制要求
+    if not args.html_template and not args.title.strip():
+        print("Error: --title is required unless using --list-presets or --html-template", file=sys.stderr)
         sys.exit(1)
-
-    if args.font is None:
+    
+    # 如果没有指定字体，font_utils 会自动查找
+    if args.font is None and not args.html_template:
+        # PIL 模式下默认使用 skill 目录下的字体
         skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         args.font = os.path.join(skill_dir, "assets", "NotoSansCJKsc-Bold.otf")
 
+
     try:
         seed = args.seed or args.title
-        used_palette = create_cover(
+        used_style_info = create_cover(
             title=args.title,
             subtitle=args.subtitle,
             output=args.output,
+            html_template_path=args.html_template,
             style=args.style,
             palette_name=args.palette,
             rotate=args.rotate,
@@ -322,10 +438,16 @@ if __name__ == "__main__":
             text_override=args.text_color,
             sub_override=args.sub_color,
             font_path=args.font,
+            account_name=args.account_name,
+            slogan=args.slogan,
+            tag=args.tag,
         )
         print(f"Cover saved: {args.output}")
-        print(f"Style: {args.style}")
-        print(f"Palette: {used_palette}")
+        if args.html_template:
+            print(f"Used HTML Template: {args.html_template}")
+        else:
+            print(f"Style: {args.style}")
+            print(f"Palette: {used_style_info}")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
