@@ -1,0 +1,12 @@
+# 用户特定文件（不应提交到公共仓库）
+references/style-dna.md
+references/my-articles/*.md
+!references/my-articles/README.md
+
+# Python
+__pycache__/
+*.pyc
+
+# 临时文件
+*.tmp
+temp_cover.html

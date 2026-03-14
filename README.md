@@ -8,12 +8,15 @@
 
 ## 功能
 
-- ✍️ **AI 文章创作**：只需一句主题，按配置风格生成完整文章
+- 🧬 **写作风格DNA**：基于你的参考文章自动提取写作风格，每个人的输出天然不同
+- ✍️ **AI 文章创作**：只需一句主题，按你的风格DNA生成完整文章
 - 📝 **公众号排版**：内联 CSS HTML 模板，适配微信编辑器，支持多种排版风格
 - 🎨 **封面风格系统**：PIL 方案（4 种风格 × 6 套配色）+ HTML 模板方案（Playwright 截图）
 - 🖼️ **正文配图生成**：概念图、流程图、数据表格等配图脚本
+- 📖 **公众号文章读取**：自动抓取微信公众号文章内容（Camoufox + 多层降级）
 - 👀 **发布前预览确认**：先看正文预览 + 封面预览，再决定是否发布
 - 🚀 **草稿推送**：自动上传封面并创建草稿（默认不直接群发）
+- 🔄 **持续进化**：每次创作交互自动学习你的偏好，风格DNA越用越准
 
 ---
 
@@ -46,6 +49,7 @@
 5. 排版风格（`default` 或 `gougestyle`）
 6. 评论开关
 7. 封面策略（HTML 模板或 PIL 方案）
+8. **写作风格DNA**：提供3-5篇你喜欢的公众号文章链接，系统自动分析并生成你的专属写作风格
 
 ---
 
@@ -88,6 +92,31 @@
 
 ---
 
+## 写作风格DNA
+
+每个用户的写作风格来自自己的参考文章，而不是公共模板。
+
+### 工作原理
+
+1. 你提供3-5篇喜欢的公众号文章链接
+2. 系统自动抓取并分析文章风格（句式、节奏、金句结构、开头结尾偏好等）
+3. 生成你的专属 `style-dna.md` 风格档案
+4. 后续每篇文章都基于这个档案生成
+5. 每次创作交互中，系统根据你的反馈持续进化DNA
+
+### 为什么不用公共模板？
+
+公共模板用的人越多，大家的内容越像。风格DNA确保每个人的输出天然不同，因为每个人的参考文章不同。
+
+### DNA 进化
+
+- 你说"这个开头太平了" → DNA 记录你不喜欢平铺直叙
+- 你选了标题B而不是A → DNA 记录你的标题偏好
+- 你手动改了某段 → DNA 对比改前改后，提取偏好变化
+- 越用越懂你，越用越像你
+
+---
+
 ## 正文配图
 
 `scripts/illustrations/` 目录下提供配图生成脚本：
@@ -111,24 +140,28 @@ wechat-article-skill/
 │   ├── NotoSansCJKsc-Bold.otf
 │   └── cover-style-palette-preview-grid.jpg
 ├── references/
-│   ├── article-style.md          (排版风格索引)
+│   ├── article-style.md              (排版风格索引)
+│   ├── style-dna-template.md         (风格DNA空白模板)
+│   ├── style-dna.md                  (用户风格DNA，系统生成)
+│   ├── my-articles/                  (用户参考文章)
+│   │   └── README.md
 │   └── styles/
-│       ├── default.md            (默认排版风格)
-│       └── gougestyle.md         (狗哥排版风格)
+│       ├── default.md                (默认排版风格)
+│       └── gougestyle.md             (狗哥排版风格)
 ├── templates/
 │   └── covers/
-│       ├── akai-cover.html       (阿凯封面模板)
-│       └── gouge-cover.html      (狗哥封面模板)
+│       ├── akai-cover.html           (阿凯封面模板)
+│       └── gouge-cover.html          (狗哥封面模板)
 └── scripts/
-    ├── font_utils.py             (跨平台字体工具)
-    ├── create_cover.py           (封面生成脚本)
+    ├── font_utils.py                 (跨平台字体工具)
+    ├── create_cover.py               (封面生成脚本)
     ├── create_cover_preview_grid.py
-    ├── publish_draft.py          (草稿发布脚本)
+    ├── publish_draft.py              (草稿发布脚本)
     └── illustrations/
-        ├── generate_concept.py   (概念示意图生成)
-        ├── generate_flow.py      (流程图生成)
-        ├── generate_header.py    (页眉图片生成)
-        └── generate_table.py     (数据表格图生成)
+        ├── generate_concept.py       (概念示意图生成)
+        ├── generate_flow.py          (流程图生成)
+        ├── generate_header.py        (页眉图片生成)
+        └── generate_table.py         (数据表格图生成)
 ```
 
 ---

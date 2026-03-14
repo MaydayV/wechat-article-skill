@@ -22,7 +22,9 @@ description: Create, format, and publish WeChat Official Account (微信公众�
     "length": "1500-2500字",
     "direction": "科技/AI/产品思考",
     "keywords_style": "短句为主，一行不超过30字",
-    "article_style": "default"
+    "article_style": "default",
+    "style_profile": "auto",
+    "reference_articles": []
   },
   "publish": {
     "need_open_comment": 1,
@@ -45,6 +47,20 @@ description: Create, format, and publish WeChat Official Account (微信公众�
   "branding": {
     "header_html": "",
     "footer_html": ""
+  },
+  "article_reader": {
+    "method": "auto",
+    "methods_priority": ["camoufox", "jina_reader", "browser_snapshot"],
+    "camoufox": {
+      "enabled": true,
+      "path": "~/.agent-reach/tools/wechat-article-for-ai/main.py"
+    },
+    "jina_reader": {
+      "enabled": true
+    },
+    "browser_snapshot": {
+      "enabled": true
+    }
   }
 }
 ```
@@ -58,11 +74,14 @@ description: Create, format, and publish WeChat Official Account (微信公众�
 4. 写作风格（视角、语气、长度、方向）
 5. 排版风格（默认 `default`，可选 `gougestyle`）
 6. 评论开关（默认：开放评论=1，仅粉丝可评=0）
-7. 封面策略：
-   - 先询问用户是否使用 HTML 封面模板 (阿凯封面模板/狗哥封面模板)。
-     - 如果是，让用户选择 `akai-cover` 或 `gouge-cover`，并写入 `cover.html_template`。
-     - 如果否，则展示 `assets/cover-style-palette-preview-grid.jpg`，让用户选择 PIL 封面样式，并写入 `cover.default_style`。
-   - 写入封面策略（默认 `palette=auto`, `rotate=sequential`, `seed=title`）
+7. 封面策略（HTML 模板或 PIL 方案）
+8. **写作风格DNA初始化**：
+   - 询问用户是否有喜欢的公众号文章（3-5篇最佳）
+   - 如果有，让用户提供链接，系统自动抓取并分析
+   - 如果没有，使用默认风格，后续在创作交互中逐步学习
+9. 文章读取能力检测：
+   - 检测 Camoufox 是否可用（`~/.agent-reach/tools/wechat-article-for-ai/main.py`）
+   - 如果不可用，提示安装或降级到其他方案
 
 若内置预览图不存在或需要更新，再执行：
 
@@ -102,14 +121,116 @@ python3 scripts/create_cover_preview_grid.py
 
 配置存在时：用户给主题即可，按流程执行「创作 → 排版 → 封面 → 预览确认 → 草稿发布」。
 
+## 写作风格DNA系统
+
+### 核心理念
+
+每个用户的写作风格来自自己的参考文章，而不是公共模板。这确保即使100个人用同一个 skill，每个人的输出都不同。
+
+### DNA 文件
+
+- **模板**：`references/style-dna-template.md`（空白模板，首次使用时复制）
+- **用户DNA**：`references/style-dna.md`（系统生成+持续更新）
+- **参考文章**：`references/my-articles/`（用户提供的参考文章）
+
+### DNA 初始化流程
+
+```
+用户提供 3-5 篇喜欢的公众号文章链接
+    ↓
+系统通过 article_reader 抓取文章内容
+    ↓
+保存到 references/my-articles/
+    ↓
+分析所有参考文章，提取风格特征：
+- 句子平均长度
+- 常用句式（反问？排比？短句连击？）
+- 金句结构（比喻型？数字型？对比型？）
+- 开头偏好（故事？数据？场景？）
+- 结尾偏好（号召？金句？悬念？）
+- 高频词汇和禁用词
+- 段落结构和节奏
+    ↓
+生成 references/style-dna.md
+    ↓
+展示给用户确认/调整
+```
+
+### DNA 持续进化
+
+每次创作交互中，系统根据用户反馈自动更新 DNA：
+
+| 用户行为 | DNA 更新 |
+|---------|---------|
+| "这个开头太平了" | 记录：avoid 平铺直叙开头 |
+| "这个金句好" | 记录：preferred 该句式模式 |
+| 用户手动改了某段 | 对比改前改后，提取偏好变化 |
+| 用户选了标题B而不是A | 记录标题偏好 |
+| "别用这种表达" | 加入 avoid_phrases |
+| "我喜欢这种感觉" | 提取特征加入 preferred |
+
+**更新规则：**
+- 每次创作结束后，检查是否有新的偏好信号
+- 如果有，更新 `references/style-dna.md` 并在更新日志中记录
+- 不要覆盖用户手动调整过的字段
+
+### 反模板化检测
+
+生成文章后，自动检查：
+- ❌ 是否出现 DNA 中 `avoid_phrases` 列表里的表达
+- ❌ 是否与 `recent_golden_phrases` 中的金句重复率 > 30%
+- ❌ 是否与最近3篇文章使用了相同的开头/结尾结构
+- ❌ 是否段落结构与最近一篇完全一致
+
+如果检测到，自动重新生成该部分，使用不同的表达方式。
+
+## 公众号文章读取
+
+### 读取方案（多层降级）
+
+当用户提供公众号文章链接时，按以下优先级读取：
+
+**1. Camoufox（首选，最稳定）**
+```bash
+cd ~/.agent-reach/tools/wechat-article-for-ai && python3 main.py "https://mp.weixin.qq.com/s/xxx"
+```
+- 能绕过微信反爬机制
+- 输出 markdown 格式，包含标题、作者、日期、正文
+- 需要预先安装
+
+**2. Jina Reader（备选）**
+```bash
+curl -s "https://r.jina.ai/https://mp.weixin.qq.com/s/xxx"
+```
+- 部分文章可能被拦截
+
+**3. Browser Snapshot（兜底）**
+- 使用 OpenClaw 的 browser 工具打开链接
+- 提取页面文本内容
+
+**4. 手动粘贴（最终兜底）**
+- 提示用户手动复制文章内容
+
+### 读取能力检测
+
+首次使用时自动检测：
+```bash
+# 检测 Camoufox
+python3 ~/.agent-reach/tools/wechat-article-for-ai/main.py --help 2>/dev/null
+```
+
+如果不可用，提示用户：
+- 安装 agent-reach skill 以获得最佳文章读取能力
+- 或降级使用其他方案
+
 ## 工作流（必须按顺序）
 
 复制并勾选：
 
 ```text
 WeChat Article Progress:
-- [ ] Step 0: 读取/初始化配置
-- [ ] Step 1: 生成文章内容
+- [ ] Step 0: 读取/初始化配置 + 加载风格DNA
+- [ ] Step 1: 生成文章内容（基于风格DNA）
 - [ ] Step 2: 产出 HTML（内联样式 + 页头页脚）
 - [ ] Step 3: 校验元数据（标题/摘要/作者）
 - [ ] Step 4: 生成封面图
@@ -117,18 +238,29 @@ WeChat Article Progress:
 - [ ] Step 5: 发送预览（文本 + 封面图）并等待确认
 - [ ] Step 6: 发布前预检（凭证/依赖/文件）
 - [ ] Step 7: 推送草稿
-- [ ] Step 8: 返回结果与下一步
+- [ ] Step 8: 返回结果 + 更新风格DNA
 ```
 
-### Step 0: 读取/初始化配置
+### Step 0: 读取/初始化配置 + 加载风格DNA
 
 - 读取 `wechat-article.config.json`
 - 不存在则进入首次配置并写入
 - 配置存在但缺字段：只补缺失字段，不覆盖用户已有偏好
+- 读取 `references/style-dna.md`
+  - 如果不存在且用户提供了参考文章，先执行 DNA 初始化
+  - 如果不存在且无参考文章，使用 `writing.*` 配置作为基础风格
 
-### Step 1: 生成文章内容
+### Step 1: 生成文章内容（基于风格DNA）
 
-按配置中的 `writing.*` 产出正文。
+**如果存在 `references/style-dna.md`：**
+- 严格按照 DNA 中定义的风格特征生成内容
+- 模仿 DNA 中记录的句式、节奏和表达习惯
+- 避免 DNA 中 `avoid_phrases` 和 `avoid_patterns` 列出的表达
+- 检查 `recent_golden_phrases`，确保不重复使用金句
+- 根据主题类型，参考 DNA 中的 `主题风格映射` 调整语言风格
+
+**如果不存在 DNA：**
+- 按配置中的 `writing.*` 产出正文
 
 约束：
 - 标题建议 ≤ 20 个中文字符（传播友好）
@@ -201,7 +333,7 @@ WeChat Article Progress:
 - 正文预览（前 2-3 段或前 200-300 字）
 
 发送规则：
-- 若当前渠道支持图片，发送“文字 + 封面图”
+- 若当前渠道支持图片，发送"文字 + 封面图"
 - 预览文案必须中文，且包含明确操作提示：
   - `确认发布`（继续）
   - `修改封面`（仅重做封面）
@@ -247,7 +379,7 @@ python3 scripts/publish_draft.py \
 2. 配置 `publish.*`
 3. 默认值（1 / 0）
 
-### Step 8: 返回结果
+### Step 8: 返回结果 + 更新风格DNA
 
 固定返回：
 - 标题、摘要、作者
@@ -256,6 +388,13 @@ python3 scripts/publish_draft.py \
 - 草稿 `media_id`
 - 已上传的正文图片 URL 列表
 - 下一步：去公众号后台「内容管理 → 草稿箱」预览并发布
+
+**DNA 更新（如果存在 style-dna.md）：**
+- 将本次文章标题加入 `recent_articles`
+- 将本次使用的开头/结尾类型加入历史记录
+- 将本次使用的金句加入 `recent_golden_phrases`
+- 如果用户在创作过程中有反馈（修改、选择、评价），更新对应的偏好字段
+- 在更新日志中记录本次变更
 
 ## 安全与边界
 
@@ -273,22 +412,26 @@ wechat-article-skill/
 │   ├── NotoSansCJKsc-Bold.otf
 │   └── cover-style-palette-preview-grid.jpg
 ├── references/
-│   ├── article-style.md          (排版风格索引)
+│   ├── article-style.md              (排版风格索引)
+│   ├── style-dna-template.md         (风格DNA空白模板)
+│   ├── style-dna.md                  (用户风格DNA，系统生成)
+│   ├── my-articles/                  (用户参考文章)
+│   │   └── README.md
 │   └── styles/
-│       ├── default.md            (默认排版风格)
-│       └── gougestyle.md         (狗哥排版风格)
+│       ├── default.md                (默认排版风格)
+│       └── gougestyle.md             (狗哥排版风格)
 ├── templates/
 │   └── covers/
-│       ├── akai-cover.html       (阿凯封面模板)
-│       └── gouge-cover.html      (狗哥封面模板)
+│       ├── akai-cover.html           (阿凯封面模板)
+│       └── gouge-cover.html          (狗哥封面模板)
 └── scripts/
-    ├── font_utils.py             (跨平台字体工具)
-    ├── create_cover.py           (封面生成脚本)
+    ├── font_utils.py                 (跨平台字体工具)
+    ├── create_cover.py               (封面生成脚本)
     ├── create_cover_preview_grid.py
-    ├── publish_draft.py          (草稿发布脚本)
+    ├── publish_draft.py              (草稿发布脚本)
     └── illustrations/
-        ├── generate_concept.py   (概念示意图生成)
-        ├── generate_flow.py      (流程图生成)
-        ├── generate_header.py    (页眉图片生成)
-        └── generate_table.py     (数据表格图生成)
+        ├── generate_concept.py       (概念示意图生成)
+        ├── generate_flow.py          (流程图生成)
+        ├── generate_header.py        (页眉图片生成)
+        └── generate_table.py         (数据表格图生成)
 ```
